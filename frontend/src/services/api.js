@@ -5,7 +5,8 @@ const API_URL =
   'https://sistemacomercio-ia.onrender.com';
 
 export const api = axios.create({
-  baseURL: API_URL
+  baseURL: API_URL,
+  timeout: 60000
 });
 
 export function fmt(v) {
