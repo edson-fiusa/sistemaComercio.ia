@@ -1,4 +1,3 @@
-// backend/src/server.js
 require('dotenv').config();
 
 const express = require('express');
@@ -8,15 +7,21 @@ const routes = require('./routes');
 const { sequelize } = require('./models');
 
 const app = express();
+
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.use(express.json());
+
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
     api: true
   });
 });
-
-app.use(cors());
-app.use(express.json());
 
 app.use(routes);
 
