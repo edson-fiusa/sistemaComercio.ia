@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { Operador } = require('../models');
+require('dotenv').config();
 
 exports.loginAdmin = async (req, res) => {
   const { senha } = req.body;

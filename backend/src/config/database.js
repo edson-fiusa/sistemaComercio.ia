@@ -1,26 +1,15 @@
 const { Sequelize } = require('sequelize');
-require('dotenv').config();
+const path = require('path');
 
-const sequelize = process.env.DATABASE_URL
-  ? new Sequelize(process.env.DATABASE_URL, {
-      dialect: 'postgres',
-      protocol: 'postgres',
-      dialectOptions: {
-        ssl: {
-          require: true,
-          rejectUnauthorized: false
-        }
-      }
-    })
-  : new Sequelize(
-      process.env.DB_NAME,
-      process.env.DB_USER,
-      process.env.DB_PASSWORD,
-      {
-        host: process.env.DB_HOST,
-        port: process.env.DB_PORT,
-        dialect: 'postgres'
-      }
-    );
+// Usamos o process.cwd() que aponta SEMPRE para a pasta raiz onde o projeto foi iniciado
+const caminhoDoBanco = path.join(process.cwd(), 'database.sqlite');
+
+console.log('===> FORÇANDO CONEXÃO SQLITE NO ARQUIVO:', caminhoDoBanco);
+
+const sequelize = new Sequelize({
+  dialect: 'sqlite',
+  storage: caminhoDoBanco,
+  logging: false
+});
 
 module.exports = sequelize;

@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react';
+import { io } from 'socket.io-client'; 
 import Header from './components/Header.jsx';
 import Toast from './components/Toast.jsx';
 import Login from './pages/Login.jsx';
 import Admin from './pages/Admin.jsx';
 import Caixa from './pages/Caixa.jsx';
 import AssistenteIA from './pages/AssistenteIA.jsx';
+
+// 🟢 CORRIGIDO: Conexão forçando os protocolos WebSocket e Polling para evitar bloqueios do navegador
+const socket = io('http://localhost:3000', {
+  transports: ['websocket', 'polling'],
+  upgrade: true
+});
 
 export default function App() {
   const [modo, setModo] = useState('login');
@@ -22,6 +29,19 @@ export default function App() {
       return () => clearTimeout(t);
     }
   }, [toastState]);
+
+  // 🟢 ESCUTA EM TEMPO REAL: Ativa na raiz do Front-end
+  useEffect(() => {
+    socket.on('alertaEstoqueBaixo', (data) => {
+      // Exibe o alerta vermelho na tela usando o seu componente Toast original
+      toast(
+        `🚨 ESTOQUE CRÍTICO: O produto "${data.nome}" atingiu o limite mínimo! Restam apenas ${data.quantidadeAtual} un.`, 
+        'error'
+      );
+    });
+
+    return () => socket.off('alertaEstoqueBaixo');
+  }, []);
 
   function sair() {
     setModo('login');

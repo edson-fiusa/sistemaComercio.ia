@@ -16,6 +16,16 @@ exports.criar = async (req, res) => {
   }
 
   try {
+    const alertasEstoqueParaDisparar = [];
+    
+    // 🟢 BLINDAGEM DO PIX PARA TESTES LOCAIS:
+    // Se for Pix e não tiver o token configurado no .env, injetamos um ID fictício para não quebrar o banco
+    let idPagamentoPix = mercadoPagoId;
+    if (String(formaPagamento).toLowerCase() === 'pix' && !process.env.MP_ACCESS_TOKEN) {
+      console.log("⚠️ MP_ACCESS_TOKEN NÃO CONFIGURADO! SIMULANDO PIX LOCAL PARA TESTES...");
+      idPagamentoPix = idPagamentoPix || `TESTE-PIX-${Date.now()}`;
+    }
+
     const result = await sequelize.transaction(async (t) => {
       const caixa = await Caixa.findByPk(caixaId, {
         transaction: t,
@@ -50,12 +60,25 @@ exports.criar = async (req, res) => {
 
         total += subtotal;
 
+        const novaQuantidade = Number(produto.quantidade) - qtd;
+
         await produto.update(
           {
-            quantidade: Number(produto.quantidade) - qtd
+            quantidade: novaQuantidade
           },
           { transaction: t }
         );
+
+        // 🟢 CAPTURA O ESTOQUE MÍNIMO: Verifica se bateu o limite
+        const estoqueMinimo = Number(produto.estoqueMinimo || 0);
+        if (novaQuantidade <= estoqueMinimo) {
+          alertasEstoqueParaDisparar.push({
+            id: produto.id,
+            nome: produto.nome,
+            quantidadeAtual: novaQuantidade,
+            estoqueMinimo: estoqueMinimo
+          });
+        }
 
         itensVenda.push({
           produtoId: produto.id,
@@ -66,11 +89,11 @@ exports.criar = async (req, res) => {
       }
 
       const troco =
-        formaPagamento === 'dinheiro'
+        String(formaPagamento).toLowerCase() === 'dinheiro'
           ? Math.max(Number(valorPago) - total, 0)
           : 0;
 
-      if (formaPagamento === 'dinheiro' && Number(valorPago) < total) {
+      if (String(formaPagamento).toLowerCase() === 'dinheiro' && Number(valorPago) < total) {
         throw new Error('Valor recebido menor que o total.');
       }
 
@@ -79,10 +102,10 @@ exports.criar = async (req, res) => {
           caixaId: caixa.id,
           operadorId: caixa.operadorId,
           total,
-          formaPagamento,
-          valorPago,
+          formaPagamento: String(formaPagamento).toLowerCase(),
+          valorPago: String(formaPagamento).toLowerCase() === 'dinheiro' ? valorPago : total,
           troco,
-          mercadoPagoId
+          mercadoPagoId: idPagamentoPix // Salva o ID real ou o nosso ID de teste local
         },
         { transaction: t }
       );
@@ -111,10 +134,16 @@ exports.criar = async (req, res) => {
       };
     });
 
+    if (req.io && alertasEstoqueParaDisparar.length > 0) {
+      alertasEstoqueParaDisparar.forEach((alerta) => {
+        console.log(`⚠️ SOCKET EMITIDO: ${alerta.nome} com estoque em ${alerta.quantidadeAtual}`);
+        req.io.emit('alertaEstoqueBaixo', alerta);
+      });
+    }
+
     res.status(201).json(result);
   } catch (error) {
     console.error('Erro ao criar venda:', error);
-
     res.status(500).json({
       erro: error.message || 'Erro ao finalizar venda.'
     });
