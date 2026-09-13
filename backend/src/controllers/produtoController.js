@@ -1,227 +1,98 @@
 const { Produto } = require('../models');
 
-/**
-
-* LISTAR PRODUTOS
-* GET /produtos
-  */
-  exports.listar = async (_req, res) => {
+// 🟢 1. LISTAR PRODUTOS
+exports.listar = async (req, res) => {
   try {
-  const produtos = await Produto.findAll({
-  order: [['nome', 'ASC']]
-  });
-
-  console.log(`Produtos encontrados: ${produtos.length}`);
-
-  return res.status(200).json(produtos);
+    const produtos = await Produto.findAll({ 
+      order: [['nome', 'ASC']] 
+    });
+    return res.json(produtos);
   } catch (error) {
-  console.error('Erro ao listar produtos:', error);
-
-  return res.status(500).json({
-  erro: error.message || 'Erro ao listar produtos.'
-  });
+    console.error("❌ ERRO AO LISTAR PRODUTOS:", error);
+    return res.status(500).json({ erro: 'Erro ao buscar produtos.', detalhe: error.message });
   }
-  };
+};
 
-/**
-
-* CRIAR PRODUTO
-* POST /produtos
-  */
-  exports.criar = async (req, res) => {
+// 🟢 2. CRIAR PRODUTO
+exports.criar = async (req, res) => {
   try {
-  const {
-  codigo,
-  nome,
-  precoVenda
-  } = req.body;
+    const { codigo, nome, precoVenda, precoEntrada, unidade, quantidade, estoqueMinimo, categoria } = req.body;
 
-  if (!codigo || !String(codigo).trim()) {
-  return res.status(400).json({
-  erro: 'O código do produto é obrigatório.'
-  });
-  }
+    if (!codigo || !nome || Number(precoVenda) <= 0) {
+      return res.status(400).json({ erro: 'Código, nome e preço de venda válido são obrigatórios.' });
+    }
 
-  if (!nome || !String(nome).trim()) {
-  return res.status(400).json({
-  erro: 'O nome do produto é obrigatório.'
-  });
-  }
+    const dadosTratados = {
+      codigo: String(codigo).trim(),
+      nome: String(nome).trim(),
+      precoVenda: Number(precoVenda),
+      precoEntrada: precoEntrada !== "" && precoEntrada !== null ? Number(precoEntrada) : 0,
+      unidade: unidade && unidade.trim() !== "" ? unidade : 'unidade',
+      quantidade: quantidade !== "" && quantidade !== null ? Number(quantidade) : 0,
+      estoqueMinimo: estoqueMinimo !== "" && estoqueMinimo !== null ? Number(estoqueMinimo) : 0,
+      categoria: categoria && categoria.trim() !== "" ? categoria : 'Geral',
+      ativo: true
+    };
 
-  if (
-  precoVenda === undefined ||
-  precoVenda === null ||
-  Number(precoVenda) <= 0
-  ) {
-  return res.status(400).json({
-  erro: 'O preço de venda deve ser maior que zero.'
-  });
-  }
+    const produto = await Produto.create(dadosTratados);
+    return res.status(201).json(produto);
 
-  const produtoExistente = await Produto.findOne({
-  where: {
-  codigo: String(codigo).trim()
-  }
-  });
-
-  if (produtoExistente) {
-  return res.status(400).json({
-  erro: 'Já existe um produto cadastrado com este código.'
-  });
-  }
-
-  const dadosProduto = {
-  ...req.body,
-  codigo: String(codigo).trim(),
-  nome: String(nome).trim(),
-  precoVenda: Number(precoVenda),
-  precoEntrada: Number(req.body.precoEntrada || 0),
-  quantidade: Number(req.body.quantidade || 0),
-  estoqueMinimo: Number(req.body.estoqueMinimo || 0)
-  };
-
-  if (dadosProduto.ean) {
-  dadosProduto.ean = String(dadosProduto.ean).trim();
-  }
-
-  const produto = await Produto.create(dadosProduto);
-
-  console.log('Produto criado:', produto.id, produto.nome);
-
-  return res.status(201).json(produto);
   } catch (error) {
-  console.error('Erro ao criar produto:', error);
-
-  return res.status(500).json({
-  erro: error.message || 'Erro ao criar produto.'
-  });
+    console.error("❌ ERRO AO CADASTRAR PRODUTO NO SQLITE:", error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({ erro: 'Já existe um produto cadastrado com este código de barras.' });
+    }
+    return res.status(500).json({ erro: 'Erro interno ao salvar o produto.', detalhe: error.message });
   }
-  };
+};
 
-/**
-
-* ATUALIZAR PRODUTO
-* PUT /produtos/:id
-  */
-  exports.atualizar = async (req, res) => {
+// 🟢 3. ATUALIZAR PRODUTO (Sintaxe corrigida para o Sequelize)
+exports.atualizar = async (req, res) => {
   try {
-  const produto = await Produto.findByPk(req.params.id);
+    const produto = await Produto.findByPk(req.params.id);
+    if (!produto) {
+      return res.status(404).json({ erro: 'Produto não encontrado.' });
+    }
 
-  if (!produto) {
-  return res.status(404).json({
-  erro: 'Produto não encontrado.'
-  });
-  }
+    const { codigo, nome, precoVenda, precoEntrada, unidade, quantidade, estoqueMinimo, categoria, ativo } = req.body;
 
-  const dados = {
-  ...req.body
-  };
+    // Fazemos as atribuições de forma isolada e segura
+    if (codigo !== undefined) produto.codigo = String(codigo).trim();
+    if (nome !== undefined) produto.nome = String(nome).trim();
+    if (precoVenda !== undefined) produto.precoVenda = Number(precoVenda);
+    if (precoEntrada !== undefined) produto.precoEntrada = precoEntrada !== "" && precoEntrada !== null ? Number(precoEntrada) : 0;
+    if (unidade !== undefined) produto.unidade = unidade && unidade.trim() !== "" ? unidade : 'unidade';
+    if (quantidade !== undefined) produto.quantidade = quantidade !== "" && quantidade !== null ? Number(quantidade) : 0;
+    if (estoqueMinimo !== undefined) produto.estoqueMinimo = estoqueMinimo !== "" && estoqueMinimo !== null ? Number(estoqueMinimo) : 0;
+    if (categoria !== undefined) produto.categoria = categoria && categoria.trim() !== "" ? categoria : 'Geral';
+    if (ativo !== undefined) produto.ativo = Boolean(ativo);
 
-  if (dados.codigo !== undefined) {
-  dados.codigo = String(dados.codigo).trim();
+    // Salva as alterações no SQLite de fato
+    await produto.save();
+    return res.json(produto);
 
-  if (!dados.codigo) {
-  return res.status(400).json({
-  erro: 'O código do produto é obrigatório.'
-  });
-  }
-
-  const outroProduto = await Produto.findOne({
-  where: {
-  codigo: dados.codigo
-  }
-  });
-
-  if (
-  outroProduto &&
-  Number(outroProduto.id) !== Number(produto.id)
-  ) {
-  return res.status(400).json({
-  erro: 'Já existe outro produto com este código.'
-  });
-  }
-  }
-
-  if (dados.nome !== undefined) {
-  dados.nome = String(dados.nome).trim();
-
-  if (!dados.nome) {
-  return res.status(400).json({
-  erro: 'O nome do produto é obrigatório.'
-  });
-  }
-  }
-
-  if (dados.precoVenda !== undefined) {
-  const precoVenda = Number(dados.precoVenda);
-
-  if (!Number.isFinite(precoVenda) || precoVenda <= 0) {
-  return res.status(400).json({
-  erro: 'O preço de venda deve ser maior que zero.'
-  });
-  }
-
-  dados.precoVenda = precoVenda;
-  }
-
-  if (dados.precoEntrada !== undefined) {
-  dados.precoEntrada = Number(dados.precoEntrada || 0);
-  }
-
-  if (dados.quantidade !== undefined) {
-  dados.quantidade = Number(dados.quantidade || 0);
-  }
-
-  if (dados.estoqueMinimo !== undefined) {
-  dados.estoqueMinimo = Number(dados.estoqueMinimo || 0);
-  }
-
-  if (dados.ean !== undefined && dados.ean !== null) {
-  dados.ean = String(dados.ean).trim();
-  }
-
-  await produto.update(dados);
-
-  console.log('Produto atualizado:', produto.id, produto.nome);
-
-  return res.status(200).json(produto);
   } catch (error) {
-  console.error('Erro ao atualizar produto:', error);
-
-  return res.status(500).json({
-  erro: error.message || 'Erro ao atualizar produto.'
-  });
+    console.error("❌ ERRO AO ATUALIZAR PRODUTO:", error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({ erro: 'Este código de barras já está sendo usado por outro produto.' });
+    }
+    return res.status(500).json({ erro: 'Erro ao atualizar o produto.', detalhe: error.message });
   }
-  };
+};
 
-/**
-
-* EXCLUIR PRODUTO
-* DELETE /produtos/:id
-  */
-  exports.excluir = async (req, res) => {
+// 🟢 4. EXCLUIR PRODUTO
+exports.excluir = async (req, res) => {
   try {
-  const produto = await Produto.findByPk(req.params.id);
+    const produto = await Produto.findByPk(req.params.id);
+    if (!produto) {
+      return res.status(404).json({ erro: 'Produto não encontrado.' });
+    }
 
-  if (!produto) {
-  return res.status(404).json({
-  erro: 'Produto não encontrado.'
-  });
-  }
+    await produto.destroy();
+    return res.json({ ok: true, mensagem: 'Produto removido com sucesso.' });
 
-  await produto.destroy();
-
-  console.log('Produto excluído:', produto.id, produto.nome);
-
-  return res.status(200).json({
-  ok: true,
-  mensagem: 'Produto excluído com sucesso.'
-  });
   } catch (error) {
-  console.error('Erro ao excluir produto:', error);
-
-  return res.status(500).json({
-  erro: error.message || 'Erro ao excluir produto.'
-  });
+    console.error("❌ ERRO AO EXCLUIR PRODUTO:", error);
+    return res.status(500).json({ erro: 'Erro ao excluir o produto.', detalhe: error.message });
   }
-  };
+};
