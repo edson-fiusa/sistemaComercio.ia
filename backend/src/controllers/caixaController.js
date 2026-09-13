@@ -1,5 +1,15 @@
+const {
+  Caixa,
+  Operador,
+  Venda,
+  ItemVenda,
+  Produto
+} = require('../models');
 
-const { Caixa, Operador } = require('../models');
+
+// =====================================================
+// 1. LISTAR CAIXAS
+// =====================================================
 
 exports.listar = async (_req, res) => {
   try {
@@ -7,148 +17,291 @@ exports.listar = async (_req, res) => {
       include: [
         {
           model: Operador,
-          as: 'operador',
-        },
+          as: 'operador'
+        }
       ],
-      order: [['createdAt', 'DESC']],
+      order: [['createdAt', 'DESC']]
     });
 
     res.json(
       caixas.map((c) => ({
         id: c.id,
         operadorId: c.operadorId,
-        operadorNome: c.operador?.nome || 'Não informado',
+        operadorNome:
+          c.operador?.nome || 'Não informado',
         dataAbertura: c.createdAt,
         dataFechamento: c.dataFechamento,
-        saldoInicial: Number(c.saldoInicial || 0),
-        saldoFinal: Number(c.saldoFinal || 0),
         total: Number(c.total || 0),
-        fechado: c.fechado,
+        fechado: c.fechado
       }))
     );
+
   } catch (error) {
-    console.error('Erro ao listar caixas:', error);
+    console.error(
+      'Erro ao listar caixas:',
+      error
+    );
 
     res.status(500).json({
       erro: 'Erro ao listar caixas.',
-      detalhe: error.message,
+      detalhe: error.message
     });
   }
 };
+
+
+// =====================================================
+// 2. ABRIR CAIXA
+// =====================================================
 
 exports.abrir = async (req, res) => {
   try {
-    const { operadorId, saldoInicial = 0 } = req.body;
+    const {
+      operadorId,
+      saldoInicial = 0
+    } = req.body;
 
     if (!operadorId) {
       return res.status(400).json({
-        erro: 'Informe o operador.',
+        erro: 'Informe o operador.'
       });
     }
 
-    const operador = await Operador.findByPk(operadorId);
+    const operador =
+      await Operador.findByPk(operadorId);
 
     if (!operador) {
       return res.status(404).json({
-        erro: 'Operador não encontrado.',
+        erro: 'Operador não encontrado.'
       });
     }
 
-    // Verifica se esse operador já possui um caixa aberto
-    const aberto = await Caixa.findOne({
-      where: {
-        operadorId,
-        fechado: false,
-      },
-      include: [
-        {
-          model: Operador,
-          as: 'operador',
-        },
-      ],
-    });
+    // Verifica se esse operador já possui
+    // um caixa aberto
+    const aberto =
+      await Caixa.findOne({
+        where: {
+          operadorId,
+          fechado: false
+        }
+      });
 
     if (aberto) {
       return res.json({
-        id: aberto.id,
         caixaId: aberto.id,
-        operadorId: aberto.operadorId,
-        operadorNome: aberto.operador?.nome || operador.nome,
-        saldoInicial: Number(aberto.saldoInicial || 0),
-        total: Number(aberto.total || 0),
-        fechado: false,
-        reaberto: true,
+        reaberto: true
       });
     }
 
-    const caixa = await Caixa.create({
-      operadorId,
-      saldoInicial: Number(saldoInicial) || 0,
-      saldoFinal: 0,
-      total: 0,
-      fechado: false,
-    });
+    const caixa =
+      await Caixa.create({
+        operadorId,
+        saldoInicial: Number(
+          saldoInicial || 0
+        )
+      });
 
     res.status(201).json({
-      id: caixa.id,
-      caixaId: caixa.id,
-      operadorId: caixa.operadorId,
-      operadorNome: operador.nome,
-      saldoInicial: Number(caixa.saldoInicial || 0),
-      total: Number(caixa.total || 0),
-      fechado: false,
-      reaberto: false,
+      caixaId: caixa.id
     });
+
   } catch (error) {
-    console.error('Erro ao abrir caixa:', error);
+    console.error(
+      'Erro ao abrir caixa:',
+      error
+    );
 
     res.status(500).json({
       erro: 'Erro ao abrir caixa.',
-      detalhe: error.message,
+      detalhe: error.message
     });
   }
 };
 
+
+// =====================================================
+// 3. FECHAR CAIXA
+// =====================================================
+
 exports.fechar = async (req, res) => {
   try {
-    const caixa = await Caixa.findByPk(req.params.id);
+    const caixa =
+      await Caixa.findByPk(
+        req.params.id
+      );
 
     if (!caixa) {
       return res.status(404).json({
-        erro: 'Caixa não encontrado.',
+        erro: 'Caixa não encontrado.'
       });
     }
 
     if (caixa.fechado) {
       return res.status(400).json({
-        erro: 'Este caixa já está fechado.',
+        erro: 'Este caixa já está fechado.'
       });
     }
 
     const saldoFinal =
-      req.body?.saldoFinal !== undefined
-        ? Number(req.body.saldoFinal)
-        : Number(caixa.total || 0);
+      Number(
+        req.body.saldoFinal ??
+        caixa.total ??
+        0
+      );
 
     await caixa.update({
       fechado: true,
       saldoFinal,
-      dataFechamento: new Date(),
+      dataFechamento: new Date()
     });
 
     res.json({
       ok: true,
       caixaId: caixa.id,
-      saldoFinal,
-      mensagem: 'Caixa fechado com sucesso.',
+      saldoFinal
     });
+
   } catch (error) {
-    console.error('Erro ao fechar caixa:', error);
+    console.error(
+      'Erro ao fechar caixa:',
+      error
+    );
 
     res.status(500).json({
       erro: 'Erro ao fechar caixa.',
-      detalhe: error.message,
+      detalhe: error.message
     });
   }
 };
 
+
+// =====================================================
+// 4. LISTAR VENDAS DE UM CAIXA
+// =====================================================
+
+exports.listarVendasDoCaixa = async (
+  req,
+  res
+) => {
+  try {
+    const { id } = req.params;
+
+    const itens =
+      await ItemVenda.findAll({
+        include: [
+          {
+            model: Venda,
+            as: 'venda',
+            where: {
+              caixaId: id
+            },
+            attributes: [
+              'id',
+              'caixaId',
+              'operadorId',
+              'total',
+              'formaPagamento',
+              'valorPago',
+              'troco',
+              'mercadoPagoId',
+              'createdAt'
+            ]
+          },
+
+          {
+            model: Produto,
+            as: 'produto',
+            attributes: [
+              'id',
+              'nome',
+              'codigo'
+            ]
+          }
+        ],
+
+        order: [
+          ['createdAt', 'DESC']
+        ]
+      });
+
+    const resposta =
+      itens.map((item) => {
+        const produto =
+          item.produto;
+
+        const venda =
+          item.venda;
+
+        return {
+          vendaId:
+            item.vendaId,
+
+          produtoId:
+            item.produtoId,
+
+          produtoNome:
+            produto?.nome ||
+            'Produto Removido',
+
+          produtoCodigo:
+            produto?.codigo ||
+            '',
+
+          quantidade:
+            Number(
+              item.quantidade || 0
+            ),
+
+          precoUnitario:
+            Number(
+              item.precoUnitario || 0
+            ),
+
+          subtotal:
+            Number(
+              item.subtotal || 0
+            ),
+
+          formaPagamento:
+            venda?.formaPagamento ||
+            '',
+
+          vendaTotal:
+            Number(
+              venda?.total || 0
+            ),
+
+          valorPago:
+            Number(
+              venda?.valorPago || 0
+            ),
+
+          troco:
+            Number(
+              venda?.troco || 0
+            ),
+
+          dataVenda:
+            venda?.createdAt ||
+            item.createdAt
+        };
+      });
+
+    return res.json(
+      resposta
+    );
+
+  } catch (error) {
+    console.error(
+      'ERRO AO BUSCAR ITENS DO CAIXA:',
+      error
+    );
+
+    return res.status(500).json({
+      erro:
+        'Erro ao buscar detalhamento de produtos do caixa.',
+      detalhe:
+        error.message
+    });
+  }
+};

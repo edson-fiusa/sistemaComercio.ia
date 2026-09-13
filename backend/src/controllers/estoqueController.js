@@ -1,375 +1,100 @@
-const {
-Produto,
-Avaria,
-Entrada,
-} = require('../models');
+const { Produto, Avaria, Entrada } = require('../models');
 
-// =====================================================
-// REGISTRAR ENTRADA
-// =====================================================
-
+// 🟢 1. REGISTRAR ENTRADA DE ESTOQUE
 exports.registrarEntrada = async (req, res) => {
-try {
-const {
-produtoId,
-quantidade,
-precoCusto,
-motivo,
-} = req.body;
-
-
-if (!produtoId) {
-  return res.status(400).json({
-    erro: 'Produto não informado.',
-  });
-}
-
-const qtd = Number(quantidade);
-
-if (!Number.isFinite(qtd) || qtd <= 0) {
-  return res.status(400).json({
-    erro: 'Quantidade inválida.',
-  });
-}
-
-const produto = await Produto.findByPk(produtoId);
-
-if (!produto) {
-  return res.status(404).json({
-    erro: 'Produto não encontrado.',
-  });
-}
-
-await Entrada.create({
-  produtoId,
-  quantidade: qtd,
-  precoCusto: Number(precoCusto || 0),
-  motivo: motivo || 'Compra/Reposição',
-});
-
-await produto.update({
-  quantidade:
-    Number(produto.quantidade || 0) + qtd,
-});
-
-return res.status(201).json({
-  ok: true,
-  mensagem: 'Entrada registrada com sucesso.',
-  produto,
-});
-
-
-} catch (error) {
-console.error('Erro ao registrar entrada:', error);
-
-
-return res.status(500).json({
-  erro:
-    error.message ||
-    'Erro ao registrar entrada.',
-});
-
-
-}
-};
-
-// =====================================================
-// REGISTRAR AVARIA
-// =====================================================
-
-exports.registrarAvaria = async (req, res) => {
-try {
-console.log('POST /avarias:', req.body);
-
-const {
-  produtoId,
-  quantidade,
-  motivo,
-  observacao,
-} = req.body;
-
-if (!produtoId) {
-  return res.status(400).json({
-    erro: 'Produto não informado.',
-  });
-}
-
-const qtd = Number(quantidade);
-
-if (!Number.isFinite(qtd) || qtd <= 0) {
-  return res.status(400).json({
-    erro: 'Quantidade inválida.',
-  });
-}
-
-if (!motivo || !motivo.trim()) {
-  return res.status(400).json({
-    erro: 'Informe o motivo da avaria.',
-  });
-}
-
-const produto = await Produto.findByPk(produtoId);
-
-if (!produto) {
-  return res.status(404).json({
-    erro: 'Produto não encontrado.',
-  });
-}
-
-const estoqueAtual = Number(
-  produto.quantidade || 0
-);
-
-if (qtd > estoqueAtual) {
-  return res.status(400).json({
-    erro:
-      'A quantidade da avaria é maior que o estoque atual.',
-  });
-}
-
-const precoCusto = Number(
-  produto.precoEntrada || 0
-);
-
-const avaria = await Avaria.create({
-  produtoId: produto.id,
-  quantidade: qtd,
-  motivo: motivo.trim(),
-  observacao: observacao
-    ? observacao.trim()
-    : null,
-  precoCusto,
-});
-
-await produto.update({
-  quantidade: estoqueAtual - qtd,
-});
-
-return res.status(201).json({
-  ok: true,
-  mensagem: 'Avaria registrada com sucesso.',
-  avaria,
-  produto,
-});
-
-
-} catch (error) {
-console.error('Erro ao registrar avaria:', error);
-
-return res.status(500).json({
-  erro:
-    error.message ||
-    'Erro ao registrar avaria.',
-});
-
-
-}
-};
-
-// =====================================================
-// LISTAR AVARIAS
-// =====================================================
-
-exports.listarAvarias = async (_req, res) => {
-try {
-const avarias = await Avaria.findAll({
-include: [
-{
-model: Produto,
-as: 'produto',
-},
-],
-order: [['createdAt', 'DESC']],
-});
-
-
-const resultado = avarias.map((avaria) => ({
-  id: avaria.id,
-
-  produtoId: avaria.produtoId,
-
-  produtoNome:
-    avaria.produto?.nome ||
-    `Produto #${avaria.produtoId}`,
-
-  codigo:
-    avaria.produto?.codigo || '',
-
-  quantidade: Number(
-    avaria.quantidade || 0
-  ),
-
-  motivo: avaria.motivo,
-
-  observacao:
-    avaria.observacao || '',
-
-  precoCusto: Number(
-    avaria.precoCusto || 0
-  ),
-
-  data:
-    avaria.createdAt ||
-    avaria.data ||
-    new Date(),
-}));
-
-return res.json(resultado);
-
-
-} catch (error) {
-console.error('Erro ao listar avarias:', error);
-
-return res.status(500).json({
-  erro:
-    error.message ||
-    'Erro ao listar avarias.',
-});
-
-
-}
-};
-
-// =====================================================
-// EXCLUIR AVARIA
-// =====================================================
-//
-// reporEstoque = true
-//    Exclui a avaria e devolve a quantidade ao estoque.
-//
-// reporEstoque = false
-//    Exclui a avaria definitivamente sem devolver estoque.
-// =====================================================
-
-exports.excluirAvaria = async (req, res) => {
-try {
-console.log('=================================');
-console.log('EXCLUINDO AVARIA');
-console.log('ID:', req.params.id);
-console.log('BODY:', req.body);
-console.log('=================================');
-
-
-const id = req.params.id;
-
-// Não força Number() para evitar problema
-// caso o banco use outro tipo de ID.
-if (!id) {
-  return res.status(400).json({
-    erro: 'ID da avaria não informado.',
-  });
-}
-
-const avaria = await Avaria.findByPk(id);
-
-if (!avaria) {
-  return res.status(404).json({
-    erro: 'Avaria não encontrada.',
-  });
-}
-
-const reporEstoque =
-  req.body?.reporEstoque === true ||
-  req.body?.reporEstoque === 'true';
-
-console.log(
-  'Avaria encontrada:',
-  avaria.toJSON()
-);
-
-console.log(
-  'Repor estoque:',
-  reporEstoque
-);
-
-// ==========================================
-// REPOR ESTOQUE
-// ==========================================
-
-if (reporEstoque) {
-  const produto = await Produto.findByPk(
-    avaria.produtoId
-  );
-
-  if (!produto) {
-    return res.status(404).json({
-      erro:
-        'O produto desta avaria não foi encontrado.',
+  try {
+    const { produtoId, quantidade, precoCusto = 0, motivo } = req.body;
+
+    const produto = await Produto.findByPk(produtoId);
+    if (!produto) {
+      return res.status(404).json({ erro: 'Produto não encontrado.' });
+    }
+
+    // Corrigido para utilizar minúsculo (produtoId) compatível com o mapeamento SQLite
+    await Entrada.create({ 
+      produtoId: produto.id, 
+      quantidade: Number(quantidade), 
+      precoCusto: Number(precoCusto), 
+      motivo: motivo || 'Entrada manual' 
     });
+
+    await produto.update({ 
+      quantidade: Number(produto.quantidade || 0) + Number(quantidade), 
+      precoEntrada: Number(precoCusto) 
+    });
+
+    return res.status(201).json({ ok: true });
+  } catch (error) {
+    console.error("❌ ERRO AO REGISTRAR ENTRADA NO SQLITE:", error);
+    return res.status(500).json({ erro: 'Erro ao registrar entrada de estoque.', detalhe: error.message });
   }
+};
 
-  const estoqueAtual = Number(
-    produto.quantidade || 0
-  );
+// 🟢 2. REGISTRAR PRODUTO AVARIADO
+exports.registrarAvaria = async (req, res) => {
+  try {
+    const { produtoId, quantidade, motivo, observacao } = req.body;
 
-  const quantidadeAvaria = Number(
-    avaria.quantidade || 0
-  );
+    const produto = await Produto.findByPk(produtoId);
+    if (!produto) {
+      return res.status(404).json({ erro: 'Produto não encontrado.' });
+    }
 
-  console.log(
-    'Estoque atual:',
-    estoqueAtual
-  );
+    if (Number(produto.quantidade || 0) < Number(quantidade)) {
+      return res.status(400).json({ erro: 'Quantidade maior que o estoque atual.' });
+    }
 
-  console.log(
-    'Quantidade da avaria:',
-    quantidadeAvaria
-  );
+    const custoCalculado = Number(produto.precoEntrada || 0) * Number(quantidade);
 
-  await produto.update({
-    quantidade:
-      estoqueAtual + quantidadeAvaria,
-  });
+    // Corrigido para usar produtoId em minúsculo e evitar quebra de chave estrangeira no SQLite
+    const avaria = await Avaria.create({ 
+      produtoId: produto.id, 
+      quantidade: Number(quantidade), 
+      motivo, 
+      observacao: observacao || '', 
+      precoCusto: custoCalculado 
+    });
 
-  console.log(
-    'Estoque reposto:',
-    estoqueAtual + quantidadeAvaria
-  );
-}
+    await produto.update({ 
+      quantidade: Number(produto.quantidade || 0) - Number(quantidade) 
+    });
 
-// ==========================================
-// EXCLUI A AVARIA
-// ==========================================
+    return res.status(201).json(avaria);
+  } catch (error) {
+    console.error("❌ ERRO AO REGISTRAR AVARIA NO SQLITE:", error);
+    return res.status(500).json({ erro: 'Erro ao salvar o produto avariado.', detalhe: error.message });
+  }
+};
 
-await avaria.destroy();
+// 🟢 3. LISTAR PRODUTOS AVARIADOS (Tratado com Include Seguro)
+exports.listarAvarias = async (_req, res) => {
+  try {
+    // Faz o include do Produto com alias padrão do Sequelize
+    const avarias = await Avaria.findAll({ 
+      include: [{ model: Produto, as: 'produto' }], // Garante o mapeamento correto do relacionamento
+      order: [['createdAt', 'DESC']] 
+    });
 
-console.log(
-  'AVARIA EXCLUÍDA COM SUCESSO'
-);
+    // Mapeia os dados limpando para o Front-end ler sem travar
+    const resultadoFormatado = avarias.map(a => {
+      // Tenta capturar o produto de forma segura pelas duas propriedades possíveis
+      const infoProduto = a.produto || a.Produto;
 
-return res.json({
-  ok: true,
+      return { 
+        id: a.id, 
+        produtoId: a.produtoId || a.ProdutoId, 
+        produtoNome: infoProduto ? infoProduto.nome : 'Produto Não Identificado', 
+        quantidade: Number(a.quantidade || 0), 
+        motivo: a.motivo || 'Não informado', 
+        observacao: a.observacao || '', 
+        precoCusto: Number(a.precoCusto || 0), 
+        data: a.createdAt 
+      };
+    });
 
-  reposto: reporEstoque,
-
-  mensagem: reporEstoque
-    ? 'Avaria excluída e quantidade reposta no estoque.'
-    : 'Avaria excluída permanentemente.',
-});
-
-
-} catch (error) {
-console.error(
-'================================='
-);
-
-
-console.error(
-  'ERRO AO EXCLUIR AVARIA:'
-);
-
-console.error(error);
-
-console.error(
-  '================================='
-);
-
-return res.status(500).json({
-  erro:
-    error.message ||
-    'Não foi possível excluir a avaria.',
-});
-
-
-}
+    return res.json(resultadoFormatado);
+  } catch (error) {
+    console.error("❌ ERRO AO LISTAR AVARIAS NO SQLITE:", error);
+    return res.status(500).json({ erro: 'Erro ao buscar lista de avarias.', detalhe: error.message });
+  }
 };
